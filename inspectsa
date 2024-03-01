@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+
+import sys
+import pickle
+import statistics
+
+def read_sa(index_path: str):
+    with open(index_path, 'rb') as f:
+        ref_genome, suffix_array = pickle.load(f)
+    return ref_genome, suffix_array
+
+def inspect_lcp1(ref_genome, suffix_array, sample_rate):
+    lcp1_array = []
+    for i in range(0, len(suffix_array) - 1, sample_rate):
+        j = suffix_array[i]
+        k = suffix_array[i + 1]
+        lcp1 = 0
+        while j < len(ref_genome) and k < len(ref_genome) and ref_genome[j] == ref_genome[k]:
+            lcp1 += 1
+            j += 1
+            k += 1
+        lcp1_array.append(lcp1)
+    return lcp1_array
+
+
+def compute_stats(lcp1_array):
+    mean_lcp1 = statistics.mean(lcp1_array)
+    median_lcp1 = statistics.median(lcp1_array)
+    max_lcp1 = max(lcp1_array)
+    return mean_lcp1, median_lcp1, max_lcp1
+
+def output_format(output_path, suffix_array, lcp1_array, mean_lcp1, median_lcp1, max_lcp1, sample_rate):
+    with open(output_path, 'w') as f:
+        f.write(f{mean_lcp1}\n")
+        f.write(f"{median_lcp1}\n")
+        f.write(f"{max_lcp1}\n")
+        f.write("suffix array spot check : ")
+        for i in range(0, len(suffix_array), sample_rate):
+            f(f"{suffix_array[i]}\t")
+        f.write("\n")
+        f.write(f"Sample Rate: {sample_rate}\n")
+        
+def main():
+    if len(sys.argv) != 4:
+        print ("Usage: python inspectsa <index_path> <sample_rate> <output_path>")
+        
+    index_path = sys.argv[1]
+    sample_rate = int(sys.argv[2])
+    output_path = sys.argv[3]
+    
+    ref_genome, suffix_array = read_sa(index_path)
+    lcp1_array = inspect_lcp1(ref_genome, suffix_array, sample_rate)
+    mean_lcp1, median_lcp1, max_lcp1 = compute_stats(lcp1_array)
+    output_format(output_path, suffix_array, lcp1_array, mean_lcp1, median_lcp1, max_lcp1, sample_rate)
+if __name__ == "__main__":
+    main()

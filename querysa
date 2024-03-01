@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+
+import sys
+import struct
+import pickle
+
+def read_sa(index_path: str):
+    with open(index_path, 'rb') as f:
+        ref_genome, suffix_array = pickle.load(f)
+    return ref_genome, suffix_array    
+
+def read_fasta(queries_path):
+    sequences = {}
+    with open(queries_path, "r") as f:
+        lines = f.readlines()
+        current_sequence = ""
+        for line in lines: 
+            if line.startswith(">"):
+                current_sequence = line.strip()[1:]
+                sequences[current_sequence] = ""
+            else:
+                sequences[current_sequence] += line.strip()
+    return sequences
+
+def naive_search(suffix_array, text, pattern):
+    index = []
+    char_count = 0
+    start = 0
+    end = len(suffix_array) - 1
+    
+    while start <= end:
+        mid = (start + end) // 2
+        
+        suffix = text[suffix_array[mid]:]
+
+        for i in range(0, min(len(suffix), len(pattern))):
+            char_count = char_count + 1
+            if pattern[i] != suffix[i]:
+                break 
+
+        if  suffix < pattern:
+            if mid == start + 1:
+                return mid, char_count
+            start = mid + 1 
+        elif suffix > pattern:
+            if mid == end - 1:
+                return end, char_count
+            end = mid - 1
+        else:
+            return mid, char_count   
+    return -1, char_count
+
+def naive_query_sa(suffix_array, text, queries, output_file):
+    with open(output_file, "w") as f:
+        for query_name, pattern in queries.items():
+            lb, char_cmp_lb = naive_search(suffix_array, text, f"{pattern}#")
+            ub, char_cmp_ub = naive_search(suffix_array, text, f"{pattern}}}")
+            occurrences = suffix_array[lb:ub + 1] if lb != -1 else []
+            k = len(occurrences)
+
+            f.write(f"{query_name}\t{char_cmp_lb}\t{char_cmp_ub}\t{k}\t")
+            if k > 0:
+                f.write("\t".join(map(str, occurrences)))
+            f.write("\n")
+def get_lcp(suffix_index, pattern, text, suffix_array):
+    lcp = 0
+    while suffix_index + lcp < len(text) and pattern[lcp] == text[suffix_array[suffix_index] + lcp]:
+        lcp += 1
+    return lcp
+
+def simpaccel_search(suffix_array, text, pattern):
+    index = []
+    char_count = 0
+    start = 0
+    end = len(suffix_array) - 1
+    
+    lcp_start_w_pattern = get_lcp(start, pattern, text, suffix_array)
+    lcp_end_w_pattern = get_lcp(end, pattern, text, suffix_array)
+    
+    char_comp = lcp_start_w_pattern + lcp_end_w_pattern  + 2
+    
+    while start < end:
+        mid = (start + end) // 2
+        suffix = text[suffix_array[mid]:]
+        lcp_mid_w_pattern = get_lcp(mid, pattern, text, suffix_array)
+        
+        for i in range(min(lcp_start_w_pattern, lcp_end_w_pattern, lcp_mid_w_pattern),min(len(pattern),len(suffix))):
+            char_count += 1
+            if pattern[i] != suffix[i]:
+                break
+
+        if pattern[i] < suffix[i]:
+            lcp_end_w_pattern = i
+            if mid == start + 1:
+                return mid, char_count
+            start = mid + 1 
+        elif pattern[i] > suffix[i]:
+            lcp_start_w_pattern = i
+            if mid == end - 1:
+                return end, char_count
+            end = mid - 1
+        else:
+            return mid, char_count   
+    return -1, char_count
+
+def simpaccel_query_sa(suffix_array, text, queries, output_file):
+    with open(output_file, "w") as f:
+        for query_name, pattern in queries.items():
+            lb, char_cmp_lb = simpaccel_search(suffix_array, text, f"{pattern}#")
+            ub, char_cmp_ub = simpaccel_search(suffix_array, text, f"{pattern}}}")
+            occurrences = suffix_array[lb:ub + 1] if lb != -1 else []
+            k = len(occurrences)
+
+            f.write(f"{query_name}\t{char_cmp_lb}\t{char_cmp_ub}\t{k}\t")
+            if k > 0:
+                f.write("\t".join(map(str, occurrences)))
+            f.write("\n")
+
+            
+def main():
+    if len(sys.argv) != 5:
+        print("Usage: querysa <index_path> <queries_path> <query_mode> <output>")
+    
+    index_path = sys.argv[1]
+    queries_path = sys.argv[2]
+    query_mode = sys.argv[3]
+    output_file = sys.argv[4]
+    
+    ref_genome, suffix_array = read_sa(index_path)
+    text = ref_genome
+    queries = read_fasta(queries_path)
+    
+    if query_mode == "naive":
+        naive_query_sa(suffix_array, text, queries, output_file)
+    elif query_mode == "simpaccel":
+        simpaccel_query_sa(suffix_array, text, queries, output_file)
+    else:
+        print("Invalid query mode. Choose either 'naive' or simpaccel'.")
+
+if __name__ == "__main__":
+    main()
